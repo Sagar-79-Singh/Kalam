@@ -19,7 +19,7 @@ function run(command, args) {
   }
 }
 run('plutil', ['-lint', path.join(bundle, 'Contents/Info.plist')]);
-run('lipo', ['-verify_arch', 'x86_64', 'arm64', path.join(bundle, 'Contents/MacOS', name)]);
+run('lipo', [path.join(bundle, 'Contents/MacOS', name), '-verify_arch', 'x86_64', 'arm64']);
 // Apple silicon requires code integrity. This is an ad-hoc local signature, not
 // Developer-ID signing or notarization, and needs no certificate or account.
 run('codesign', ['--force', '--deep', '--sign', '-', bundle]);
