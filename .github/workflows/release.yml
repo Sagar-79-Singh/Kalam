@@ -18,20 +18,26 @@ jobs:
   build:
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
+    # Use the oldest supported Linux userspace so .deb binaries do not require
+    # the newest runner host glibc. Windows/macOS use their native runners.
+    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             platform: linux/amd64
+            container: ubuntu:22.04
             asset: linux-amd64
             flags: '-tags webkit2_41'
           - os: windows-latest
             platform: windows/amd64
+            container: ''
             asset: windows-amd64
             flags: ''
           - os: macos-latest
             platform: darwin/universal
+            container: ''
             asset: macos-universal
             flags: ''
     env:
@@ -43,8 +49,21 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y sudo ca-certificates curl git libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+      - name: Prepare Windows installer compiler
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            $directory = "${env:ProgramFiles(x86)}\NSIS"
+            if (-not (Test-Path "$directory\makensis.exe")) {
+              choco install nsis --yes --no-progress
+              if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+            }
+            if (-not (Test-Path "$directory\makensis.exe")) { throw "NSIS compiler was not found" }
+            Add-Content -Path $env:GITHUB_PATH -Value $directory
+          }
       - name: Checkout source
         uses: actions/checkout@v4
       - name: Prepare metadata runtime
@@ -76,6 +95,18 @@ jobs:
           # v2.2's built-in uploader uses a retired artifact service.
           # Use the current uploader below, and publish installers in one job.
           package: 'false'
+      - name: Report native build diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const file = 'build/native-build.log';
+          if (fs.existsSync(file)) {
+            const detail = fs.readFileSync(file, 'utf8').slice(-14000).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+            console.log(`::error title=Native build details::${detail}`);
+          }
+          JS
       - name: Package Linux installer
         if: runner.os == 'Linux'
         run: node scripts/package-linux.mjs
@@ -83,6 +114,10 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
+          plutil -lint "build/bin/$PRODUCT_NAME.app/Contents/Info.plist"
+          lipo -verify_arch x86_64 arm64 "build/bin/$PRODUCT_NAME.app/Contents/MacOS/$PRODUCT_NAME"
+          codesign --force --deep --sign - "build/bin/$PRODUCT_NAME.app"
+          codesign --verify --deep --strict "build/bin/$PRODUCT_NAME.app"
           mkdir -p build/dmg
           cp -R "build/bin/$PRODUCT_NAME.app" build/dmg/
           ln -s /Applications build/dmg/Applications
@@ -92,7 +127,7 @@ jobs:
         with:
           name: installers-${{ matrix.asset }}
           path: |
-            build/bin/*.exe
+            build/bin/*-installer.exe
             build/bin/*.dmg
             build/bin/*.deb
           if-no-files-found: error

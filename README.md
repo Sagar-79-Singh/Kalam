@@ -12,10 +12,10 @@ You do not need to install developer tools or run terminal commands.
 2. Choose a version and download the installer for your computer:
    - **Windows x64:** the `-installer.exe` file. The other `.exe`, when present, is the portable application. The installer can download the system WebView2 runtime if it is missing.
    - **macOS, Intel or Apple silicon:** the universal `.dmg`. Open it and drag the application into **Applications**.
-   - **Debian / Ubuntu Linux x64:** the `.deb`. Open it in your software installer. GTK 3 and WebKitGTK 4.1 are required and declared as package dependencies.
+   - **Debian 12+ / Ubuntu 22.04+ Linux x64:** the `.deb`. Open it in your software installer. GTK 3 and WebKitGTK 4.1 are required and declared as package dependencies.
 3. Open the app, then configure **Settings → Connection**.
 
-Installers are currently **unsigned**. Windows SmartScreen or macOS Gatekeeper may ask you to confirm opening a downloaded application. Use the operating system’s normal “Open anyway” controls only after verifying that you downloaded it from this repository. No signing or notarization credentials are embedded in the project.
+Installers are currently **not Developer-ID signed or notarized**. The macOS bundle receives a local ad-hoc integrity signature, not a developer identity. Windows SmartScreen or macOS Gatekeeper may ask you to confirm opening a downloaded application. Use the operating system’s normal “Open anyway” controls only after verifying that you downloaded it from this repository. No signing or notarization credentials are embedded in the project.
 
 ## Connect OmniRoute
 
@@ -127,7 +127,7 @@ To publish a version using only GitHub’s interface:
 
 For a test build without publishing a release, open **Actions → Desktop installers → Run workflow**. These installers appear under that run’s **Artifacts**, not in Releases. Pull requests also build installers. **Checks** validates TypeScript, parser/prompt/backup tests, the production frontend, and Go persistence/gateway tests.
 
-The release workflow uses the requested `dAppServer/wails-build-action@v2.2` build implementation, sets a 4 GB Node heap budget, and builds Linux amd64, Windows amd64, and macOS universal. GitHub rejects a direct reference to v2.2 because it contains a retired artifact uploader, even with uploading disabled. A build-only compatibility script downloads its pinned manifest, updates that uploader and the Linux WebKitGTK 4.1 dependencies, and skips the unused macOS signing-tool install for unsigned builds. The patched action exists only in the ignored CI workspace; the v2.2 Go, Node, Wails, and build steps are preserved. Linux explicitly receives the WebKitGTK 4.1 build tag. Version tags are applied to build metadata without creating commits. Current upload/download actions handle installers, and a separate tag-only job attaches release assets. No automated commit or alternate Git identity is configured.
+The release workflow uses the requested `dAppServer/wails-build-action@v2.2` build implementation, sets a 4 GB Node heap budget, and builds Linux amd64, Windows amd64, and macOS universal. GitHub rejects a direct reference to v2.2 because it contains a retired artifact uploader, even with uploading disabled. A build-only compatibility script downloads its pinned manifest, updates that uploader and the Linux WebKitGTK 4.1 dependencies, fixes the Windows executable suffix, and skips the unused macOS signing-tool install for builds without signing credentials. Windows explicitly prepares NSIS; macOS verifies both CPU slices and its local integrity signature before packaging. The patched action exists only in the ignored CI workspace; the v2.2 Go, Node, Wails, and build steps are preserved. Linux runs in an Ubuntu 22.04 userspace on the current runner host to retain older glibc compatibility, and explicitly receives the WebKitGTK 4.1 build tag. Version tags are applied to build metadata without creating commits. Current upload/download actions handle installers, and a separate tag-only job attaches release assets. No automated commit or alternate Git identity is configured.
 
 `.github/CODEOWNERS` assigns every file to the repository owner. GitHub branch rules must also require code-owner review if approvals are to be enforced; a CODEOWNERS file alone does not enable that rule.
 
