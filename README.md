@@ -127,7 +127,7 @@ To publish a version using only GitHub’s interface:
 
 For a test build without publishing a release, open **Actions → Desktop installers → Run workflow**. These installers appear under that run’s **Artifacts**, not in Releases. Pull requests also build installers. **Checks** validates TypeScript, parser/prompt/backup tests, the production frontend, and Go persistence/gateway tests.
 
-The release workflow pins the requested build action, sets a 4 GB Node heap budget, and builds Linux amd64, Windows amd64, and macOS universal. Its Linux job uses an Ubuntu 22.04 container on the current Ubuntu runner to accommodate the pinned action’s older system-dependency assumptions, while explicitly passing the WebKitGTK 4.1 build tag. Version tags are applied to build metadata without creating commits. The action’s retired built-in uploader is disabled; current upload/download actions handle installers and a separate tag-only job attaches release assets. No automated commit or alternate Git identity is configured.
+The release workflow uses the requested `dAppServer/wails-build-action@v2.2` build implementation, sets a 4 GB Node heap budget, and builds Linux amd64, Windows amd64, and macOS universal. GitHub rejects a direct reference to v2.2 because it contains a retired artifact uploader, even with uploading disabled. A build-only compatibility script downloads its pinned manifest, updates that uploader and the Linux WebKitGTK 4.1 dependencies, and skips the unused macOS signing-tool install for unsigned builds. The patched action exists only in the ignored CI workspace; the v2.2 Go, Node, Wails, and build steps are preserved. Linux explicitly receives the WebKitGTK 4.1 build tag. Version tags are applied to build metadata without creating commits. Current upload/download actions handle installers, and a separate tag-only job attaches release assets. No automated commit or alternate Git identity is configured.
 
 `.github/CODEOWNERS` assigns every file to the repository owner. GitHub branch rules must also require code-owner review if approvals are to be enforced; a CODEOWNERS file alone does not enable that rule.
 
@@ -153,6 +153,7 @@ packaging/                        App icon and native metadata templates
 scripts/
   sync-name.mjs                   Syncs product metadata from constants
   prepare-packaging.mjs           Copies bundle templates into generated build/
+  prepare-build-action.mjs        Pinned action / current-runner compatibility
   package-linux.mjs               Builds the .deb installer
 frontend/
   package.json, package-lock.json
