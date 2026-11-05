@@ -85,7 +85,11 @@ while ($null -ne ($line = [Console]::ReadLine())) {
             }
             'keys' {
                 [void][KalamAutomation]::SetForegroundWindow([IntPtr]$root.Current.NativeWindowHandle)
-                $root.SetFocus()
+                if ($request.focus) {
+                    $target = Get-Target -Root $root -Request ([pscustomobject]@{ name = $request.focus; role = 'input'; contains = $false })
+                    $target.SetFocus()
+                } else { $root.SetFocus() }
+                Start-Sleep -Milliseconds 100
                 [System.Windows.Forms.SendKeys]::SendWait([string]$request.keys)
             }
             'pressed' {

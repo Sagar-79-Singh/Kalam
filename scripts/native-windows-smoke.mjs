@@ -192,7 +192,7 @@ try {
   await text('Ready after cancellation.');
   await until(() => records('messages').some(message => message.content.includes('Ready after cancellation.')), 'Native SQLite conversation persistence');
   console.log('PASS real upstream cancellation, recovery, and SQLite chat persistence');
-  await ui('keys', { keys: '^,' }); await click('Appearance'); await click('Dark');
+  await ui('keys', { keys: '^,', focus: 'Message' }); await click('Appearance'); await click('Dark');
   await until(() => records('settings')[0].theme === 'dark', 'Persisted dark appearance');
   await click('Close settings');
   await ui('screenshot', { file: path.join(output, 'native-chat.png') });
@@ -201,14 +201,15 @@ try {
   await click('Check the native runtime', true); await text('Ready after cancellation.');
   assert.ok(records('memories').some(memory => memory.content === 'Native runtime check completed'));
   assert.equal(records('artifacts')[0].id, 'native-page');
-  await ui('keys', { keys: '^,' }); await click('Appearance');
+  await ui('keys', { keys: '^,', focus: 'Message' }); await click('Appearance');
   assert.equal(await ui('pressed', { name: 'Dark', role: 'button' }), true, 'The restarted interface must hydrate its dark-theme selection.');
   await click('Memory'); await text('Native runtime check completed');
   await click('Close settings');
   console.log('PASS clean native restart, persisted dark theme, SQLite history/artifacts, and memory');
   await quit();
   await execute(path.join(installation, 'uninstall.exe'), ['/S'], 'Silent NSIS uninstallation');
-  console.log('PASS real uninstaller completes');
+  await until(async () => { try { await access(executable); return false; } catch (error) { if (error.code === 'ENOENT') return true; throw error; } }, 'Installed executable removal');
+  console.log('PASS real uninstaller removes the installed executable');
 } catch (error) {
   const visible = driver && application ? await ui('snapshot').catch(() => '') : '';
   if (driver && application) await ui('screenshot', { file: path.join(output, 'failure.png') }).catch(() => undefined);
