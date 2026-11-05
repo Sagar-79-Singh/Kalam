@@ -129,6 +129,8 @@ For a test build without publishing a release, open **Actions → Desktop instal
 
 The release workflow uses the requested `dAppServer/wails-build-action@v2.2` build implementation, sets a 4 GB Node heap budget, and builds Linux amd64, Windows amd64, and macOS universal. GitHub rejects a direct reference to v2.2 because it contains a retired artifact uploader, even with uploading disabled. A build-only compatibility script downloads its pinned manifest, updates that uploader and the Linux WebKitGTK 4.1 dependencies, fixes the Windows executable suffix, and skips the unused macOS signing-tool install for builds without signing credentials. Windows explicitly prepares NSIS; macOS verifies both CPU slices and its local integrity signature before packaging. The patched action exists only in the ignored CI workspace; the v2.2 Go, Node, Wails, and build steps are preserved. Linux runs in an Ubuntu 22.04 userspace on the current runner host to retain older glibc compatibility, and explicitly receives the WebKitGTK 4.1 build tag. Version tags are applied to build metadata without creating commits. Current upload/download actions handle installers, and a separate tag-only job attaches release assets. No automated commit or alternate Git identity is configured.
 
+For recovery, **Publish verified installers** can promote the exact artifacts from an already-successful installer run to an existing release. It verifies that the run, all three platform jobs, and the unchanged version tag match the approved source commit. It does not rebuild the app or move the tag, and includes `SHA256SUMS.txt` with the installers. Normal releases continue to use the tag-triggered workflow.
+
 `.github/CODEOWNERS` assigns every file to the repository owner. GitHub branch rules must also require code-owner review if approvals are to be enforced; a CODEOWNERS file alone does not enable that rule.
 
 ## Engineering map
@@ -138,6 +140,7 @@ The release workflow uses the requested `dAppServer/wails-build-action@v2.2` bui
   CODEOWNERS
   workflows/ci.yml                 TypeScript and Go checks
   workflows/release.yml            Three-platform installers and tag releases
+  workflows/promote-release.yml    Promotes exact verified release artifacts
 main.go                           Native window and embedded frontend
 app.go                            Narrow, Wails-bound persistence actions
 storage.go                        SQLite schema, atomic chat writes, CRUD

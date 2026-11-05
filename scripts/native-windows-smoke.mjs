@@ -202,7 +202,7 @@ try {
   assert.ok(records('memories').some(memory => memory.content === 'Native runtime check completed'));
   assert.equal(records('artifacts')[0].id, 'native-page');
   await ui('keys', { keys: '^,', focus: 'Message' }); await click('Appearance');
-  assert.equal(await ui('pressed', { name: 'Dark', role: 'button' }), true, 'The restarted interface must hydrate its dark-theme selection.');
+  assert.equal(await until(() => ui('pressed', { name: 'Dark', role: 'button' }), 'Restored dark-theme selection'), true, 'The restarted interface must hydrate its dark-theme selection.');
   await click('Memory'); await text('Native runtime check completed');
   await click('Close settings');
   console.log('PASS clean native restart, persisted dark theme, SQLite history/artifacts, and memory');
