@@ -76,10 +76,15 @@ func (a *App) middleware(next http.Handler) http.Handler {
 			if strings.Contains(recorder.Header().Get("Content-Type"), "text/html") {
 				settings, err := a.store.settings()
 				if err == nil {
-					// Re-marshal so JSON embedded in a script cannot terminate its script element.
-					var value interface{}
-					if json.Unmarshal([]byte(settings), &value) == nil {
-						encoded, _ := json.Marshal(value)
+					// Only appearance belongs in startup HTML, never credentials or personal
+					// instructions. Marshal again so strings cannot close the script element.
+					var appearance struct {
+						Theme    string  `json:"theme,omitempty"`
+						Font     string  `json:"font,omitempty"`
+						FontSize float64 `json:"fontSize,omitempty"`
+					}
+					if json.Unmarshal([]byte(settings), &appearance) == nil {
+						encoded, _ := json.Marshal(appearance)
 						body = bytes.Replace(body, []byte("/*__KALAM_BOOTSTRAP__*/ null"), encoded, 1)
 					}
 				}

@@ -65,7 +65,7 @@ func TestGatewayStreamsAndUsesOnlyConfiguredCredentials(t *testing.T) {
 }
 func TestThemeBootstrapEscapesScriptContent(t *testing.T) {
 	r := testRepository(t)
-	if err := r.saveSettings(`{"theme":"dark","name":"</script><script>alert(1)</script>"}`); err != nil {
+	if err := r.saveSettings(`{"theme":"dark","font":"</script><script>alert(1)</script>","fontSize":18,"apiKey":"not-for-startup-html","customInstructions":"private-personal-instructions"}`); err != nil {
 		t.Fatal(err)
 	}
 	a := &App{store: r}
@@ -76,8 +76,13 @@ func TestThemeBootstrapEscapesScriptContent(t *testing.T) {
 	response := httptest.NewRecorder()
 	a.middleware(next).ServeHTTP(response, httptest.NewRequest("GET", "/", nil))
 	body := response.Body.String()
-	if !strings.Contains(body, `"theme":"dark"`) || strings.Contains(body, "<script>alert(1)") || strings.Contains(body, "/*__KALAM_BOOTSTRAP__*/") {
+	if !strings.Contains(body, `"theme":"dark"`) || !strings.Contains(body, `"fontSize":18`) || strings.Contains(body, "<script>alert(1)") || strings.Contains(body, "/*__KALAM_BOOTSTRAP__*/") {
 		t.Fatalf("unsafe bootstrap: %s", body)
+	}
+	for _, private := range []string{"apiKey", "customInstructions", "not-for-startup-html", "private-personal-instructions"} {
+		if strings.Contains(body, private) {
+			t.Fatalf("private settings embedded in startup HTML: %s", private)
+		}
 	}
 }
 func TestGatewayRejectsUnknownRoutesAndMissingConnection(t *testing.T) {

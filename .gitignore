@@ -4,7 +4,8 @@ frontend/dist/
 frontend/public/artifact-runtime.js
 frontend/wailsjs/
 packaging/bin/
-packaging/windows/installer/
+packaging/windows/installer/*
+!packaging/windows/installer/project.nsi
 packaging/windows/icon.ico
 packaging/appicon.icns
 *.tsbuildinfo

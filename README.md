@@ -2,7 +2,7 @@
 
 A quiet, local-first desktop space for Sagar to think, write, and create. Powered **only by your own OmniRoute gateway**.
 
-**Windows · macOS · Linux** — Wails v2, Go, React, Vite, and Tailwind. Uses your operating system’s webview; no bundled Chromium and no Electron.
+**Windows · macOS · Linux** — Wails v2.17.1, Go 1.26, React, Vite, and Tailwind. Uses your operating system’s webview; no bundled Chromium and no Electron.
 
 ## Download and open
 
@@ -49,7 +49,7 @@ HTML, React/JSX/TSX, SVG, Mermaid, and Markdown artifacts open in an overlay pan
 
 Use **Preview / Code**, switch versions, edit source and save a new version, copy, download, refresh, or expand to fullscreen. **New artifact / paste code** also works without an AI connection. The artifact library collects creations from saved chats.
 
-Previews run in an iframe with `sandbox="allow-scripts"`, without same-origin access. A content security policy disables fetch connections, external resources, forms, and embedded parent access. React, the rendering runtime, and icons are supplied locally. React source should use inline styles or an embedded `<style>` element; it cannot import arbitrary packages or a utility CSS framework. Mermaid is rendered with strict security settings.
+Previews run in an iframe with `sandbox="allow-scripts"`, without same-origin access. A content security policy disables fetch connections, external resources, forms, and embedded parent access. React, the rendering runtime, and icons are supplied locally. React source should use inline styles or an embedded `<style>` element; it cannot import arbitrary packages or a utility CSS framework. Mermaid is rendered with strict security settings. The pinned Wails v2.17.1 runtime includes native IPC origin/frame guards, including the Linux child-frame security fix; do not downgrade this dependency for an app that renders untrusted artifact code.
 
 The system prompt tells the model to create or update complete source using stable IDs:
 
@@ -91,7 +91,7 @@ Only connect servers you trust. Enabled tools may read or modify data on their s
 
 Light, dark, and system themes use a warm cream / charcoal palette. Switch conversation fonts between Inter/system sans, Georgia-style serif, mono, and a Verdana-based dyslexic-friendly option with wider spacing. Font size is adjustable.
 
-The native window stays hidden until its HTML has loaded. On desktop, Go inserts persisted SQLite settings into the HTML before the **blocking appearance script** runs and before React mounts. The browser preview has an appearance-only startup cache. Chat data is never placed in localStorage.
+The native window stays hidden until its HTML has loaded. On desktop, Go inserts only persisted appearance settings from SQLite into the HTML before the **blocking appearance script** runs and before React mounts. Credentials and personal instructions are never embedded in that HTML. The browser preview has an appearance-only startup cache. Chat data is never placed in localStorage.
 
 The conversation menu exports **Markdown**, **JSON**, or **PDF**. PDF uses the operating system print dialog and a print stylesheet; choose the system’s PDF destination. Desktop text/code/JSON downloads use a native save dialog rather than relying on webview blob downloads.
 
@@ -125,7 +125,7 @@ To publish a version using only GitHub’s interface:
 4. Publish the release. Creating the `v*` tag triggers **Desktop installers**.
 5. Watch the **Actions** tab. After all three platform jobs pass, the `.exe`, `.dmg`, and `.deb` files are attached to that release. Download them from its **Assets** list.
 
-For a test build without publishing a release, open **Actions → Desktop installers → Run workflow**. These installers appear under that run’s **Artifacts**, not in Releases. Pull requests also build installers. **Checks** validates TypeScript, parser/prompt/backup tests, the production frontend, and Go persistence/gateway tests.
+For a test build without publishing a release, open **Actions → Desktop installers → Run workflow**. These installers appear under that run’s **Artifacts**, not in Releases. Pull requests also build installers. The Windows job silently installs its actual installer and checks the installed app through system WebView2: native before-EOF streaming, cancellation, MCP, skill loading, iframe isolation, SQLite history, and persisted-theme restart. The check-only automation client does not download a browser, is not part of the app, and enables debugging only for its CI subprocess. **Checks** validates TypeScript, parser/prompt/backup/form tests, the production frontend, and Go persistence/gateway/native-transport tests.
 
 The release workflow uses the requested `dAppServer/wails-build-action@v2.2` build implementation, sets a 4 GB Node heap budget, and builds Linux amd64, Windows amd64, and macOS universal. GitHub rejects a direct reference to v2.2 because it contains a retired artifact uploader, even with uploading disabled. A build-only compatibility script downloads its pinned manifest, updates that uploader and the Linux WebKitGTK 4.1 dependencies, fixes the Windows executable suffix, and skips the unused macOS signing-tool install for builds without signing credentials. Windows explicitly prepares NSIS; macOS verifies both CPU slices and its local integrity signature before packaging. The patched action exists only in the ignored CI workspace; the v2.2 Go, Node, Wails, and build steps are preserved. Linux runs in an Ubuntu 22.04 userspace on the current runner host to retain older glibc compatibility, and explicitly receives the WebKitGTK 4.1 build tag. Version tags are applied to build metadata without creating commits. Current upload/download actions handle installers, and a separate tag-only job attaches release assets. No automated commit or alternate Git identity is configured.
 
@@ -156,6 +156,7 @@ scripts/
   prepare-build-action.mjs        Pinned action / current-runner compatibility
   package-linux.mjs               Builds the .deb installer
   package-macos.mjs               Verifies and packages the universal .dmg
+  native-windows-smoke.mjs         Real installer and system-webview checks
 frontend/
   package.json, package-lock.json
   index.html                      Go-backed blocking theme bootstrap

@@ -87,8 +87,8 @@ jobs:
           # v2.2 expands this command argument directly and has no tags input.
           # Pass WebKit 4.1 explicitly; GOFLAGS alone is overridden by wails.
           build-platform: ${{ matrix.platform }} ${{ matrix.flags }}
-          wails-version: v2.10.2
-          go-version: '1.25.x'
+          wails-version: v2.17.1
+          go-version: '1.26.x'
           node-version: '22.x'
           nsis: 'true'
           sign: 'false'
@@ -113,6 +113,21 @@ jobs:
       - name: Package macOS disk image
         if: runner.os == 'macOS'
         run: node scripts/package-macos.mjs
+      - name: Prepare native Windows runtime check
+        if: runner.os == 'Windows'
+        run: npm install --prefix .build-tools/native-test --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright-core@1.51.1
+      - name: Check installed Windows app in system WebView2
+        if: runner.os == 'Windows'
+        timeout-minutes: 8
+        run: node scripts/native-windows-smoke.mjs
+      - name: Upload native runtime diagnostics
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-check-windows
+          path: build/native-smoke/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
