@@ -55,14 +55,42 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
-            $directory = "${env:ProgramFiles(x86)}\NSIS"
-            if (-not (Test-Path "$directory\makensis.exe")) {
-              choco install nsis --yes --no-progress
-              if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+          $ErrorActionPreference = 'Stop'
+          try {
+            function Find-NsisCompiler {
+              $command = Get-Command makensis -ErrorAction SilentlyContinue
+              if ($command) { return $command.Source }
+              $locations = @(
+                "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+                "$env:ProgramFiles\NSIS\makensis.exe",
+                "$env:ChocolateyInstall\bin\makensis.exe"
+              )
+              foreach ($file in $locations) {
+                if (Test-Path -LiteralPath $file) { return $file }
+              }
+              $tools = "$env:ChocolateyInstall\lib\nsis\tools"
+              if (Test-Path -LiteralPath $tools) {
+                $file = Get-ChildItem -LiteralPath $tools -Filter makensis.exe -File -Recurse | Select-Object -First 1
+                if ($file) { return $file.FullName }
+              }
+              return $null
             }
-            if (-not (Test-Path "$directory\makensis.exe")) { throw "NSIS compiler was not found" }
-            Add-Content -Path $env:GITHUB_PATH -Value $directory
+            $compiler = Find-NsisCompiler
+            if (-not $compiler) {
+              $installationLog = (& choco install nsis --yes --no-progress 2>&1 | Out-String)
+              Write-Host $installationLog
+              if ($LASTEXITCODE -notin @(0, 1641, 3010)) { throw "NSIS installation failed: $installationLog" }
+              $compiler = Find-NsisCompiler
+            }
+            if (-not $compiler) { throw 'NSIS compiler was not found after installation.' }
+            Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $compiler)
+            & $compiler /VERSION
+            if ($LASTEXITCODE -ne 0) { throw "NSIS compiler could not run: $compiler" }
+            $global:LASTEXITCODE = 0
+          } catch {
+            $detail = ($_ | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows installer compiler::$detail"
+            throw
           }
       - name: Checkout source
         uses: actions/checkout@v4
