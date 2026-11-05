@@ -1,0 +1,25 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Kalam",
+  "outputfilename": "Kalam",
+  "version": "2",
+  "frontend:dir": "frontend",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "build:dir": "build",
+  "wailsjsdir": "frontend",
+  "author": {
+    "name": "Sagar-79-Singh",
+    "email": "s07909084193@gmail.com"
+  },
+  "info": {
+    "companyName": "Sagar-79-Singh",
+    "productName": "Kalam",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2026 Sagar-79-Singh",
+    "comments": "A personal desktop workspace powered by OmniRoute."
+  },
+  "devServer": "0.0.0.0:34115"
+}

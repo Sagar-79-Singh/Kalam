@@ -1,0 +1,196 @@
+name: Desktop installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+  pull_request:
+    paths-ignore: ['README.md', 'docs/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    # Use the oldest supported Linux userspace so .deb binaries do not require
+    # the newest runner host glibc. Windows/macOS use their native runners.
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux/amd64
+            container: ubuntu:22.04
+            asset: linux-amd64
+            flags: '-tags webkit2_41'
+          - os: windows-latest
+            platform: windows/amd64
+            container: ''
+            asset: windows-amd64
+            flags: ''
+          - os: macos-latest
+            platform: darwin/universal
+            container: ''
+            asset: macos-universal
+            flags: ''
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
+      GOFLAGS: ${{ matrix.asset == 'linux-amd64' && '-tags=webkit2_41' || '' }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y sudo ca-certificates curl git libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+      - name: Prepare Windows installer compiler
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          try {
+            function Find-NsisCompiler {
+              $command = Get-Command makensis -ErrorAction SilentlyContinue
+              if ($command) { return $command.Source }
+              $locations = @(
+                "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+                "$env:ProgramFiles\NSIS\makensis.exe",
+                "$env:ChocolateyInstall\bin\makensis.exe"
+              )
+              foreach ($file in $locations) {
+                if (Test-Path -LiteralPath $file) { return $file }
+              }
+              $tools = "$env:ChocolateyInstall\lib\nsis\tools"
+              if (Test-Path -LiteralPath $tools) {
+                $file = Get-ChildItem -LiteralPath $tools -Filter makensis.exe -File -Recurse | Select-Object -First 1
+                if ($file) { return $file.FullName }
+              }
+              return $null
+            }
+            $compiler = Find-NsisCompiler
+            if (-not $compiler) {
+              $installationLog = (& choco install nsis --yes --no-progress 2>&1 | Out-String)
+              Write-Host $installationLog
+              if ($LASTEXITCODE -notin @(0, 1641, 3010)) { throw "NSIS installation failed: $installationLog" }
+              $compiler = Find-NsisCompiler
+            }
+            if (-not $compiler) { throw 'NSIS compiler was not found after installation.' }
+            Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $compiler)
+            & $compiler /VERSION
+            if ($LASTEXITCODE -ne 0) { throw "NSIS compiler could not run: $compiler" }
+            $global:LASTEXITCODE = 0
+          } catch {
+            $detail = ($_ | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows installer compiler::$detail"
+            throw
+          }
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Prepare metadata runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: Prepare bundle assets and version metadata
+        shell: bash
+        run: |
+          node scripts/sync-name.mjs
+          node scripts/prepare-packaging.mjs
+      - name: Prepare pinned Wails build action
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/prepare-build-action.mjs
+      - name: Build desktop app
+        # dAppServer/wails-build-action@v2.2, with a retired-service compatibility patch.
+        uses: ./.build-tools/wails-build-action
+        with:
+          build-name: ${{ env.PRODUCT_NAME }}
+          # v2.2 expands this command argument directly and has no tags input.
+          # Pass WebKit 4.1 explicitly; GOFLAGS alone is overridden by wails.
+          build-platform: ${{ matrix.platform }} ${{ matrix.flags }}
+          wails-version: v2.17.1
+          go-version: '1.26.x'
+          node-version: '22.x'
+          nsis: 'true'
+          sign: 'false'
+          # v2.2's built-in uploader uses a retired artifact service.
+          # Use the current uploader below, and publish installers in one job.
+          package: 'false'
+      - name: Report native build diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const file = 'build/native-build.log';
+          if (fs.existsSync(file)) {
+            const detail = fs.readFileSync(file, 'utf8').slice(-14000).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+            console.log(`::error title=Native build details::${detail}`);
+          }
+          JS
+      - name: Package Linux installer
+        if: runner.os == 'Linux'
+        run: node scripts/package-linux.mjs
+      - name: Package macOS disk image
+        if: runner.os == 'macOS'
+        run: node scripts/package-macos.mjs
+      - name: Check installed Windows app in system WebView2
+        if: runner.os == 'Windows'
+        timeout-minutes: 8
+        run: node scripts/native-windows-smoke.mjs
+      - name: Upload native runtime diagnostics
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-check-windows
+          path: build/native-smoke/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.asset }}
+          path: |
+            build/bin/*-installer.exe
+            build/bin/*.dmg
+            build/bin/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release assets
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: Read product name
+        run: node scripts/sync-name.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: installers
+      - name: Publish installers to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$VERSION_TAG" >/dev/null 2>&1; then
+            gh release create "$VERSION_TAG" --verify-tag --title "$PRODUCT_NAME $VERSION_TAG" --notes "Desktop installers for Windows, macOS, and Debian/Ubuntu Linux. Powered by your OmniRoute gateway. These builds are unsigned."
+          fi
+          gh release upload "$VERSION_TAG" installers/*.exe installers/*.dmg installers/*.deb --clobber
