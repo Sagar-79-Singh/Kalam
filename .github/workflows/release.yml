@@ -112,16 +112,7 @@ jobs:
         run: node scripts/package-linux.mjs
       - name: Package macOS disk image
         if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          plutil -lint "build/bin/$PRODUCT_NAME.app/Contents/Info.plist"
-          lipo -verify_arch x86_64 arm64 "build/bin/$PRODUCT_NAME.app/Contents/MacOS/$PRODUCT_NAME"
-          codesign --force --deep --sign - "build/bin/$PRODUCT_NAME.app"
-          codesign --verify --deep --strict "build/bin/$PRODUCT_NAME.app"
-          mkdir -p build/dmg
-          cp -R "build/bin/$PRODUCT_NAME.app" build/dmg/
-          ln -s /Applications build/dmg/Applications
-          hdiutil create -volname "$PRODUCT_NAME" -srcfolder build/dmg -ov -format UDZO "build/bin/$PRODUCT_NAME-macos-universal.dmg"
+        run: node scripts/package-macos.mjs
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:

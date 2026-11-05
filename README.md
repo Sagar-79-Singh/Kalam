@@ -155,6 +155,7 @@ scripts/
   prepare-packaging.mjs           Copies bundle templates into generated build/
   prepare-build-action.mjs        Pinned action / current-runner compatibility
   package-linux.mjs               Builds the .deb installer
+  package-macos.mjs               Verifies and packages the universal .dmg
 frontend/
   package.json, package-lock.json
   index.html                      Go-backed blocking theme bootstrap
@@ -194,7 +195,7 @@ frontend/
         ConnectorSettings, SkillsSettings, MemorySettings, DataSettings
   tests/
     artifacts.test.ts, sse.test.ts, backup-prompt.test.ts
-    omniroute.test.ts, native-stream.test.ts
+    omniroute.test.ts, native-stream.test.ts, fields.test.ts
 ```
 
 All named source files are implemented, not code excerpts. Components are kept small; AI traffic cannot select a second provider. The browser-only persistence fallback is isolated in `db.ts`; the shipped app always uses Go and SQLite. Local data is stored under the operating system’s configuration directory in the application’s `data.sqlite` file.

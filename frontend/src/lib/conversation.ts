@@ -33,7 +33,7 @@ export async function sendUserMessage(content: string, attachments: Attachment[]
   let chat = activeChat() ?? createDraftChat();
   if (editMessageId) { const index = chat.messages.findIndex(m => m.id === editMessageId); if (index >= 0) chat = trimFrom(chat, index); }
   const firstMessage = chat.messages.length === 0;
-  chat = { ...chat, model: state.settings.model, updatedAt: Date.now(), title: firstMessage ? chatTitle(content || attachments[0]?.name || '') : chat.title, messages: [...chat.messages, { id: uid(), role: 'user', content: content.trim(), attachments, createdAt: Date.now() }] };
+  chat = { ...chat, model: state.settings.model, updatedAt: Date.now(), title: firstMessage && !editMessageId ? chatTitle(content || attachments[0]?.name || '') : chat.title, messages: [...chat.messages, { id: uid(), role: 'user', content: content.trim(), attachments, createdAt: Date.now() }] };
   state.updateChat(chat); useApp.setState({ activeChatId: chat.id, promptDraft: '' });
   await generate(chat.id);
 }
