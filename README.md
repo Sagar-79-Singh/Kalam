@@ -11,7 +11,7 @@ You do not need to install developer tools or run terminal commands.
 1. Open this repository’s **Releases** tab.
 2. Choose a version and download the installer for your computer:
    - **Windows x64:** the `-installer.exe` file. The other `.exe`, when present, is the portable application. The installer can download the system WebView2 runtime if it is missing.
-   - **macOS, Intel or Apple silicon:** the universal `.dmg`. Open it and drag the application into **Applications**.
+   - **macOS 12 Monterey or newer, Intel or Apple silicon:** the universal `.dmg`. Open it and drag the application into **Applications**.
    - **Debian 12+ / Ubuntu 22.04+ Linux x64:** the `.deb`. Open it in your software installer. GTK 3 and WebKitGTK 4.1 are required and declared as package dependencies.
 3. Open the app, then configure **Settings → Connection**.
 
@@ -125,7 +125,7 @@ To publish a version using only GitHub’s interface:
 4. Publish the release. Creating the `v*` tag triggers **Desktop installers**.
 5. Watch the **Actions** tab. After all three platform jobs pass, the `.exe`, `.dmg`, and `.deb` files are attached to that release. Download them from its **Assets** list.
 
-For a test build without publishing a release, open **Actions → Desktop installers → Run workflow**. These installers appear under that run’s **Artifacts**, not in Releases. Pull requests also build installers. The Windows job silently installs its actual installer and checks the installed app through system WebView2: native before-EOF streaming, cancellation, MCP, skill loading, iframe isolation, SQLite history, and persisted-theme restart. The check-only automation client does not download a browser, is not part of the app, and enables debugging only for its CI subprocess. **Checks** validates TypeScript, parser/prompt/backup/form tests, the production frontend, and Go persistence/gateway/native-transport tests.
+For a test build without publishing a release, open **Actions → Desktop installers → Run workflow**. These installers appear under that run’s **Artifacts**, not in Releases. Pull requests also build installers. The Windows job silently installs its actual installer and checks the installed app through system WebView2: native before-EOF streaming, cancellation, MCP, skill loading, iframe isolation, SQLite history, and persisted-theme restart. The check uses Windows UI Automation against the unchanged release binary and inspects its isolated SQLite database. It does not download a browser, expose a debug port, weaken the runtime’s environment protections, or add test hooks to the app. **Checks** validates TypeScript, parser/prompt/backup/form tests, the production frontend, and Go persistence/gateway/native-transport tests.
 
 The release workflow uses the requested `dAppServer/wails-build-action@v2.2` build implementation, sets a 4 GB Node heap budget, and builds Linux amd64, Windows amd64, and macOS universal. GitHub rejects a direct reference to v2.2 because it contains a retired artifact uploader, even with uploading disabled. A build-only compatibility script downloads its pinned manifest, updates that uploader and the Linux WebKitGTK 4.1 dependencies, fixes the Windows executable suffix, and skips the unused macOS signing-tool install for builds without signing credentials. Windows explicitly prepares NSIS; macOS verifies both CPU slices and its local integrity signature before packaging. The patched action exists only in the ignored CI workspace; the v2.2 Go, Node, Wails, and build steps are preserved. Linux runs in an Ubuntu 22.04 userspace on the current runner host to retain older glibc compatibility, and explicitly receives the WebKitGTK 4.1 build tag. Version tags are applied to build metadata without creating commits. Current upload/download actions handle installers, and a separate tag-only job attaches release assets. No automated commit or alternate Git identity is configured.
 
@@ -157,6 +157,7 @@ scripts/
   package-linux.mjs               Builds the .deb installer
   package-macos.mjs               Verifies and packages the universal .dmg
   native-windows-smoke.mjs         Real installer and system-webview checks
+  windows-ui-automation.ps1        CI-only Windows accessibility driver
 frontend/
   package.json, package-lock.json
   index.html                      Go-backed blocking theme bootstrap

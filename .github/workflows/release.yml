@@ -113,9 +113,6 @@ jobs:
       - name: Package macOS disk image
         if: runner.os == 'macOS'
         run: node scripts/package-macos.mjs
-      - name: Prepare native Windows runtime check
-        if: runner.os == 'Windows'
-        run: npm install --prefix .build-tools/native-test --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright-core@1.51.1
       - name: Check installed Windows app in system WebView2
         if: runner.os == 'Windows'
         timeout-minutes: 8
