@@ -1,0 +1,131 @@
+name: Desktop installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+  pull_request:
+    paths-ignore: ['README.md', 'docs/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    # The pinned action installs the older WebKit development package too.
+    # Jammy supports both packages; GOFLAGS selects WebKit 4.1 for the binary.
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux/amd64
+            container: ubuntu:22.04
+            asset: linux-amd64
+            flags: '-tags webkit2_41'
+          - os: windows-latest
+            platform: windows/amd64
+            container: ''
+            asset: windows-amd64
+            flags: ''
+          - os: macos-latest
+            platform: darwin/universal
+            container: ''
+            asset: macos-universal
+            flags: ''
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
+      GOFLAGS: ${{ matrix.asset == 'linux-amd64' && '-tags=webkit2_41' || '' }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y sudo ca-certificates curl git libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config libwebkit2gtk-4.0-dev gcc-aarch64-linux-gnu
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Prepare metadata runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: Prepare bundle assets and version metadata
+        shell: bash
+        run: |
+          node scripts/sync-name.mjs
+          node scripts/prepare-packaging.mjs
+      - name: Build desktop app
+        uses: dAppServer/wails-build-action@v2.2
+        with:
+          build-name: ${{ env.PRODUCT_NAME }}
+          # v2.2 expands this command argument directly and has no tags input.
+          # Pass WebKit 4.1 explicitly; GOFLAGS alone is overridden by wails.
+          build-platform: ${{ matrix.platform }} ${{ matrix.flags }}
+          wails-version: v2.10.2
+          go-version: '1.25.x'
+          node-version: '22.x'
+          nsis: 'true'
+          sign: 'false'
+          # v2.2's built-in uploader uses a retired artifact service.
+          # Use the current uploader below, and publish installers in one job.
+          package: 'false'
+      - name: Package Linux installer
+        if: runner.os == 'Linux'
+        run: node scripts/package-linux.mjs
+      - name: Package macOS disk image
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p build/dmg
+          cp -R "build/bin/$PRODUCT_NAME.app" build/dmg/
+          ln -s /Applications build/dmg/Applications
+          hdiutil create -volname "$PRODUCT_NAME" -srcfolder build/dmg -ov -format UDZO "build/bin/$PRODUCT_NAME-macos-universal.dmg"
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.asset }}
+          path: |
+            build/bin/*.exe
+            build/bin/*.dmg
+            build/bin/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release assets
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: Read product name
+        run: node scripts/sync-name.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: installers
+      - name: Publish installers to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$VERSION_TAG" >/dev/null 2>&1; then
+            gh release create "$VERSION_TAG" --verify-tag --title "$PRODUCT_NAME $VERSION_TAG" --notes "Desktop installers for Windows, macOS, and Debian/Ubuntu Linux. Powered by your OmniRoute gateway. These builds are unsigned."
+          fi
+          gh release upload "$VERSION_TAG" installers/*.exe installers/*.dmg installers/*.deb --clobber

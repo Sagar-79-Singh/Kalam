@@ -1,0 +1,16 @@
+import { mkdir, readFile, writeFile, copyFile, chmod } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+const config = JSON.parse(await readFile('wails.json', 'utf8'));
+const name = config.name;
+const packageName = name.toLowerCase();
+const version = config.info.productVersion;
+const stage = path.resolve('build/deb');
+for (const directory of ['DEBIAN', 'usr/bin', 'usr/share/applications', `usr/share/icons/hicolor/512x512/apps`, `usr/share/doc/${packageName}`]) await mkdir(path.join(stage, directory), { recursive: true });
+await copyFile(`build/bin/${name}`, path.join(stage, `usr/bin/${packageName}`));
+await chmod(path.join(stage, `usr/bin/${packageName}`), 0o755);
+await copyFile('packaging/appicon.png', path.join(stage, `usr/share/icons/hicolor/512x512/apps/${packageName}.png`));
+await copyFile('LICENSE', path.join(stage, `usr/share/doc/${packageName}/copyright`));
+await writeFile(path.join(stage, `usr/share/applications/${packageName}.desktop`), `[Desktop Entry]\nName=${name}\nComment=A personal thinking space powered by OmniRoute\nExec=${packageName}\nIcon=${packageName}\nTerminal=false\nType=Application\nCategories=Utility;Office;\nStartupWMClass=${name}\n`);
+await writeFile(path.join(stage, 'DEBIAN/control'), `Package: ${packageName}\nVersion: ${version}\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: Sagar-79-Singh <s07909084193@gmail.com>\nDepends: libgtk-3-0, libwebkit2gtk-4.1-0\nDescription: A personal desktop workspace powered by OmniRoute\n Local-first conversations, artifacts, and a space to think.\n`);
+execFileSync('dpkg-deb', ['--build', '--root-owner-group', stage, `build/bin/${name}-${version}-linux-amd64.deb`], { stdio: 'inherit' });
