@@ -1,0 +1,101 @@
+name: Publish verified installers
+
+# Promote the exact files that already passed all checks. Never move an
+# existing version tag or rebuild the application from a different commit.
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful Desktop installers run ID
+        type: string
+        required: true
+        default: '41998393076'
+      source_commit:
+        description: Full source commit shared by the run and version tag
+        type: string
+        required: true
+        default: 'ad2bcb8ef2c85af8634784526de02d8abe7a9ac1'
+      version_tag:
+        description: Existing release tag
+        type: string
+        required: true
+        default: 'v1.0.0'
+  push:
+    branches: ['arena/1886f05f-kalam']
+    paths: ['.github/workflows/promote-release.yml']
+
+permissions: {}
+
+concurrency:
+  group: promote-${{ inputs.version_tag || 'v1.0.0' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Promote verified release files
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: ${{ inputs.source_run || '41998393076' }}
+      SOURCE_COMMIT: ${{ inputs.source_commit || 'ad2bcb8ef2c85af8634784526de02d8abe7a9ac1' }}
+      VERSION_TAG: ${{ inputs.version_tag || 'v1.0.0' }}
+    steps:
+      - name: Verify successful build and unchanged release source
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import json, os, re, subprocess
+          def api(route):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GH_REPO"]}/{route}'], text=True))
+          run_id, commit, tag = (os.environ[name] for name in ['SOURCE_RUN', 'SOURCE_COMMIT', 'VERSION_TAG'])
+          assert re.fullmatch(r'[0-9]+', run_id), 'Invalid run ID'
+          assert re.fullmatch(r'[0-9a-f]{40}', commit), 'A full source SHA is required'
+          assert re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?', tag), 'Invalid version tag'
+          run = api(f'actions/runs/{run_id}')
+          assert run['name'] == 'Desktop installers' and run['conclusion'] == 'success', 'Only a successful installer run can be promoted'
+          assert run['head_sha'] == commit, 'The successful run must match the approved source commit'
+          jobs = api(f'actions/runs/{run_id}/jobs?filter=latest&per_page=100')['jobs']
+          passed = {job['name'] for job in jobs if job['conclusion'] == 'success'}
+          assert {'windows/amd64', 'darwin/universal', 'linux/amd64'} <= passed, 'All three platforms must pass, including the Windows installed-app check'
+          target = api(f'git/ref/tags/{tag}')['object']
+          for _ in range(4):
+              if target['type'] == 'commit': break
+              assert target['type'] == 'tag', 'Unexpected version reference type'
+              target = api(f'git/tags/{target["sha"]}')['object']
+          assert target['type'] == 'commit' and target['sha'] == commit, 'Never publish files against a different release commit'
+          release = api(f'releases/tags/{tag}')
+          artifacts = api(f'actions/runs/{run_id}/artifacts?per_page=100')['artifacts']
+          available = {item['name'] for item in artifacts if not item['expired'] and item['size_in_bytes'] > 0}
+          assert {'installers-windows-amd64', 'installers-macos-universal', 'installers-linux-amd64'} <= available, 'Verified installer artifacts are missing or expired'
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'RELEASE_URL={release["html_url"]}\n')
+          print(f'Verified all-platform run {run_id}, source {commit}, and unchanged tag {tag}.')
+          PY
+      - name: Download the exact verified installers
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN }}
+          pattern: installers-*
+          merge-multiple: true
+          path: installers
+      - name: Hash and publish the verified files
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import hashlib, os, pathlib, subprocess
+          folder = pathlib.Path('installers')
+          files = sorted(path for path in folder.iterdir() if path.is_file())
+          assert len(files) == 3 and {path.suffix for path in files} == {'.exe', '.dmg', '.deb'}, 'Expected exactly one installer per platform'
+          assert all(path.stat().st_size > 0 for path in files), 'An installer is empty'
+          checksums = folder / 'SHA256SUMS.txt'
+          checksums.write_text(''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n' for path in files), encoding='utf-8')
+          subprocess.run(['gh', 'release', 'upload', os.environ['VERSION_TAG'], *map(str, files), str(checksums), '--clobber'], check=True)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write(f'Published the exact installers from successful run **{os.environ["SOURCE_RUN"]}** to [{os.environ["VERSION_TAG"]}]({os.environ["RELEASE_URL"]}), with SHA-256 checksums. The version tag and application source were not changed.\n')
+          PY

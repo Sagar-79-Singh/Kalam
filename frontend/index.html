@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#F5F1E8" />
+    <meta name="description" content="Your personal desktop space to think, create, and explore." />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <title>Kalam</title>
+    <script>
+      window.__KALAM_BOOTSTRAP__ = /*__KALAM_BOOTSTRAP__*/ null;
+      (function () {
+        var settings = window.__KALAM_BOOTSTRAP__;
+        if (!settings) { try { settings = JSON.parse(localStorage.getItem('kalam:appearance') || 'null'); } catch (_) {} }
+        settings = settings || {};
+        var dark = settings.theme === 'dark' || ((!settings.theme || settings.theme === 'system') && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        document.documentElement.style.backgroundColor = dark ? '#1F1E1B' : '#F5F1E8';
+        document.documentElement.dataset.font = settings.font || 'inter';
+        document.documentElement.style.setProperty('--chat-font-size', (settings.fontSize || 16) + 'px');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
